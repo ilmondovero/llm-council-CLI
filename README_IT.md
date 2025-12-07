@@ -2,7 +2,7 @@
 
 ![LLM Council](header.jpg)
 
-Italiano | [Read in English](README.md)
+🇮🇹 Italiano | [🇬🇧 English](README.md)
 
 Un sistema locale di deliberazione multi-modello basato su CLI che riunisce Google Gemini, OpenAI Codex e Anthropic Claude per rispondere collaborativamente alle tue domande attraverso un processo strutturato in 3 fasi.
 
@@ -38,7 +38,7 @@ Prima di eseguire LLM Council, devi installare e autenticare tre strumenti CLI:
 - **Codex CLI** (OpenAI)
 - **Claude CLI** (Anthropic)
 
-Vedi la guida completa all'installazione: [docs/INSTALL_CLI.md](docs/INSTALL_CLI.md)
+Vedi la guida completa all'installazione: [docs/INSTALL_CLI_IT.md](docs/INSTALL_CLI_IT.md)
 
 ## Avvio Rapido
 
@@ -266,7 +266,7 @@ llm-council-master/
 ### Errori CLI non trovata
 - Verifica installazione CLI: `which gemini` / `which codex` / `which claude`
 - Assicurati che le CLI siano nel PATH
-- Vedi [docs/INSTALL_CLI.md](docs/INSTALL_CLI.md) per aiuto installazione
+- Vedi [docs/INSTALL_CLI_IT.md](docs/INSTALL_CLI_IT.md) per aiuto installazione
 
 ### Timeout dei modelli
 - Timeout predefinito è 120 secondi per chiamata CLI

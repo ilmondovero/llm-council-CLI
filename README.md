@@ -2,7 +2,7 @@
 
 ![LLM Council](header.jpg)
 
-[Leggi in Italiano](README_IT.md) | English
+🇬🇧 English | [🇮🇹 Italiano](README_IT.md)
 
 A local, CLI-based multi-model AI deliberation system that brings together Google Gemini, OpenAI Codex, and Anthropic Claude to collaboratively answer your questions through a structured 3-stage process.
 
