@@ -1,26 +1,31 @@
-"""Configuration for the LLM Council."""
+"""Configuration for the LLM Council.
 
-import os
-from dotenv import load_dotenv
+This version uses CLI tools (Gemini CLI, Codex CLI, Claude CLI) instead of
+external APIs. No API keys required - uses local CLI subscriptions.
+"""
 
-load_dotenv()
+# =============================================================================
+# CLI-Based Council Configuration
+# =============================================================================
 
-# OpenRouter API key
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
-# Council members - list of OpenRouter model identifiers
+# Council members - CLI identifiers
+# Each member will be queried via its respective CLI tool:
+# - gemini: Google Gemini CLI (https://github.com/google-gemini/gemini-cli)
+# - codex: OpenAI Codex CLI (https://github.com/openai/codex)
+# - claude: Anthropic Claude CLI (https://github.com/anthropics/claude-code)
 COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4.5",
-    "x-ai/grok-4",
+    "gemini",   # Google Gemini via Gemini CLI
+    "codex",    # OpenAI GPT via Codex CLI
+    "claude",   # Anthropic Claude via Claude CLI
 ]
 
 # Chairman model - synthesizes final response
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
+# Uses Gemini as default chairman (fast and good at synthesis)
+CHAIRMAN_MODEL = "gemini"
 
-# OpenRouter API endpoint
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+# =============================================================================
+# Storage Configuration
+# =============================================================================
 
 # Data directory for conversation storage
 DATA_DIR = "data/conversations"

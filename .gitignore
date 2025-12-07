@@ -8,14 +8,40 @@ wheels/
 
 # Virtual environments
 .venv
+venv/
 
 # Keys and secrets
 .env
+.env.local
+.env.*.local
 
-# Data files
+# Data files (user conversations)
 data/
 
 # Frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
+# Root node_modules (for Playwright tests)
+node_modules/
+package-lock.json
+
+# Test artifacts
+screenshot-*.png
+e2e-test.js
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+.python-version
