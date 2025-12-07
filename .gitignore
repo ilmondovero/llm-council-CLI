@@ -45,3 +45,8 @@ Thumbs.db
 *.log
 npm-debug.log*
 .python-version
+
+# Frontend animated
+frontend-animated/node_modules/
+frontend-animated/dist/
+frontend-animated/.vite/

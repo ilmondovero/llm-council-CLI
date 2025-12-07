@@ -24,10 +24,38 @@ if %ERRORLEVEL% NEQ 0 (
 :: Change to script directory
 cd /d "%~dp0"
 
+:: Frontend selection
+echo.
+echo ============================================================
+echo  Select Frontend Interface:
+echo ============================================================
+echo.
+echo  [1] Classic UI (React - port 5173)
+echo      Simple, clean interface
+echo.
+echo  [2] Animated UI (React + Tailwind + Framer Motion - port 5174)
+echo      Modern dark theme with animations
+echo.
+set /p FRONTEND_CHOICE="Enter choice (1 or 2): "
+
+if "%FRONTEND_CHOICE%"=="2" (
+    set FRONTEND_DIR=frontend-animated
+    set FRONTEND_PORT=5174
+    echo.
+    echo  Selected: Animated UI
+) else (
+    set FRONTEND_DIR=frontend
+    set FRONTEND_PORT=5173
+    echo.
+    echo  Selected: Classic UI
+)
+
 :: Kill any existing instances on our ports
+echo.
 echo [1/5] Cleaning up previous instances...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8001.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5173.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5174.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
 echo       Done.
 
 echo.
@@ -41,9 +69,9 @@ echo       Done.
 
 echo.
 echo [3/5] Checking frontend dependencies...
-if not exist "frontend\node_modules" (
-    echo       Installing npm packages...
-    cd frontend
+if not exist "%FRONTEND_DIR%\node_modules" (
+    echo       Installing npm packages for %FRONTEND_DIR%...
+    cd %FRONTEND_DIR%
     npm install --silent
     cd ..
 )
@@ -66,8 +94,8 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo [5/5] Starting Frontend Server (port 5173)...
-start "LLM Council Frontend" cmd /c "cd frontend && npm run dev"
+echo [5/5] Starting Frontend Server (port %FRONTEND_PORT%)...
+start "LLM Council Frontend" cmd /c "cd %FRONTEND_DIR% && npm run dev"
 
 :: Wait for frontend to start
 timeout /t 5 /nobreak >nul
@@ -77,7 +105,7 @@ echo ============================================================
 echo  LLM Council is now running!
 echo ============================================================
 echo.
-echo  Frontend: http://localhost:5173
+echo  Frontend: http://localhost:%FRONTEND_PORT%
 echo  Backend:  http://localhost:8001
 echo.
 echo  Council Members:
@@ -89,7 +117,7 @@ echo  Press any key to open the browser...
 pause >nul
 
 :: Open browser
-start http://localhost:5173
+start http://localhost:%FRONTEND_PORT%
 
 echo.
 echo  To stop the servers, run stop.bat or close the terminal windows.
