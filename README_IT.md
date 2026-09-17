@@ -297,14 +297,16 @@ cd frontend
 npm run dev
 ```
 
-Esegui test:
+Esegui i test:
 ```bash
-# Test backend
-python -m pytest backend/tests/
+# Suite backend offline (predefinita; non invoca mai le CLI reali dei modelli)
+py -m pytest -q
 
-# Testa CLI manualmente
-python -m backend.tests.test_cli_bridge
+# Test di integrazione (espliciti; invocano le CLI Gemini, Codex e Claude installate)
+py -m pytest -q -m integration
 ```
+
+I test marcati `integration` sono esclusi per impostazione predefinita. Eseguili esplicitamente solo su una macchina in cui le tre CLI sono installate e autenticate.
 
 ## Licenza
 

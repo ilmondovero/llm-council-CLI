@@ -299,12 +299,14 @@ npm run dev
 
 Run tests:
 ```bash
-# Backend tests
-python -m pytest backend/tests/
+# Offline backend suite (default; never invokes the real model CLIs)
+py -m pytest -q
 
-# Test CLIs manually
-python -m backend.tests.test_cli_bridge
+# Integration tests (explicit; invokes the installed Gemini, Codex, and Claude CLIs)
+py -m pytest -q -m integration
 ```
+
+Tests marked `integration` are excluded by default. Run them explicitly only on a machine where the three CLIs are installed and authenticated.
 
 ## License
 

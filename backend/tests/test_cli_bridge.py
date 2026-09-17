@@ -8,12 +8,15 @@ O per test singoli: pytest backend/tests/test_cli_bridge.py::test_query_gemini_b
 
 import pytest
 import asyncio
+import subprocess
 import sys
 import os
+from unittest.mock import Mock
 
 # Aggiungi il path del backend
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+import backend.cli_bridge as cli_bridge
 from backend.cli_bridge import (
     query_model,
     query_models_parallel,
@@ -113,6 +116,68 @@ tokens used
         assert clean_cli_output("", "gemini") == ""
         assert clean_cli_output("", "codex") == ""
         assert clean_cli_output("", "claude") == ""
+
+
+# ============================================================================
+# Offline subprocess security tests
+# ============================================================================
+
+@pytest.mark.parametrize(
+    ("cli_type", "resolved_path", "expected_args"),
+    [
+        ("gemini", "/tools/gemini", []),
+        ("codex", "/tools/codex", ["exec", "-"]),
+        ("claude", "/tools/claude", ["-p", "--dangerously-skip-permissions"]),
+    ],
+)
+def test_prompt_is_passed_unchanged_only_via_stdin(
+    monkeypatch, cli_type, resolved_path, expected_args
+):
+    prompt = ('user says " & | > % ^ and keeps going: ' + "x" * 2500)
+    find_cli = Mock(return_value=resolved_path)
+    run = Mock(
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="model response", stderr=""
+        )
+    )
+    monkeypatch.setattr(cli_bridge, "_find_cli_path", find_cli)
+    monkeypatch.setattr(cli_bridge.subprocess, "run", run)
+
+    assert cli_bridge._run_cli_sync(cli_type, prompt) == "model response"
+
+    find_cli.assert_called_once_with(cli_type)
+    command = run.call_args.args[0]
+    kwargs = run.call_args.kwargs
+    assert command == [resolved_path, *expected_args]
+    assert all(prompt not in argument for argument in command)
+    assert kwargs["input"] == prompt
+    assert kwargs["shell"] is False
+
+
+def test_find_cli_path_checks_cmd_on_windows(monkeypatch):
+    which = Mock(side_effect=[None, r"C:\tools\gemini.cmd"])
+    monkeypatch.setattr(cli_bridge.os, "name", "nt")
+    monkeypatch.setattr(cli_bridge.shutil, "which", which)
+
+    assert cli_bridge._find_cli_path("gemini") == r"C:\tools\gemini.cmd"
+    assert which.call_args_list[0].args == ("gemini",)
+    assert which.call_args_list[1].args == ("gemini.cmd",)
+
+
+@pytest.mark.asyncio
+async def test_query_model_returns_none_when_cli_is_not_found(monkeypatch):
+    which = Mock(return_value=None)
+    run = Mock()
+    monkeypatch.setattr(cli_bridge.shutil, "which", which)
+    monkeypatch.setattr(cli_bridge.subprocess, "run", run)
+
+    response = await query_model(
+        "gemini", [{"role": "user", "content": "offline prompt"}]
+    )
+
+    assert response is None
+    assert which.call_args_list[0].args == ("gemini",)
+    run.assert_not_called()
 
 
 # ============================================================================

@@ -2,6 +2,7 @@
 
 import json
 import os
+import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -13,9 +14,20 @@ def ensure_data_dir():
     Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
 
 
+def _normalize_conversation_id(conversation_id: str) -> str:
+    """Validate a conversation ID and return its canonical UUID form."""
+    if not isinstance(conversation_id, str):
+        raise ValueError("Conversation ID must be a UUID string")
+    try:
+        return str(uuid.UUID(conversation_id))
+    except (ValueError, AttributeError) as exc:
+        raise ValueError("Invalid conversation ID") from exc
+
+
 def get_conversation_path(conversation_id: str) -> str:
-    """Get the file path for a conversation."""
-    return os.path.join(DATA_DIR, f"{conversation_id}.json")
+    """Get the file path for a UUID-identified conversation."""
+    normalized_id = _normalize_conversation_id(conversation_id)
+    return os.path.join(DATA_DIR, f"{normalized_id}.json")
 
 
 def create_conversation(conversation_id: str) -> Dict[str, Any]:
@@ -28,10 +40,11 @@ def create_conversation(conversation_id: str) -> Dict[str, Any]:
     Returns:
         New conversation dict
     """
+    normalized_id = _normalize_conversation_id(conversation_id)
     ensure_data_dir()
 
     conversation = {
-        "id": conversation_id,
+        "id": normalized_id,
         "created_at": datetime.utcnow().isoformat(),
         "title": "New Conversation",
         "messages": []
@@ -55,8 +68,12 @@ def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Conversation dict or None if not found
     """
-    path = get_conversation_path(conversation_id)
+    try:
+        normalized_id = _normalize_conversation_id(conversation_id)
+    except ValueError:
+        return None
 
+    path = get_conversation_path(normalized_id)
     if not os.path.exists(path):
         return None
 
@@ -71,9 +88,8 @@ def save_conversation(conversation: Dict[str, Any]):
     Args:
         conversation: Conversation dict to save
     """
-    ensure_data_dir()
-
     path = get_conversation_path(conversation['id'])
+    ensure_data_dir()
     with open(path, 'w') as f:
         json.dump(conversation, f, indent=2)
 

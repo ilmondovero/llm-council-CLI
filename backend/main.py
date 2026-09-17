@@ -11,7 +11,15 @@ import json
 import asyncio
 
 from . import storage
-from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from .council import (
+    ALL_MODELS_FAILED_MESSAGE,
+    calculate_aggregate_rankings,
+    generate_conversation_title,
+    run_full_council,
+    stage1_collect_responses,
+    stage2_collect_rankings,
+    stage3_synthesize_final,
+)
 
 app = FastAPI(title="LLM Council API")
 
@@ -157,6 +165,25 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
             stage1_results = await stage1_collect_responses(request.content)
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
+
+            if not stage1_results:
+                stage3_result = {
+                    "model": "error",
+                    "response": ALL_MODELS_FAILED_MESSAGE,
+                }
+                storage.add_assistant_message(conversation_id, [], [], stage3_result)
+
+                if title_task:
+                    try:
+                        title = await title_task
+                        storage.update_conversation_title(conversation_id, title)
+                        yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
+                    except Exception:
+                        # Title generation must not replace the council failure.
+                        pass
+
+                yield f"data: {json.dumps({'type': 'error', 'message': ALL_MODELS_FAILED_MESSAGE})}\n\n"
+                return
 
             # Stage 2: Collect rankings
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
