@@ -50,3 +50,6 @@ npm-debug.log*
 frontend-animated/node_modules/
 frontend-animated/dist/
 frontend-animated/.vite/
+
+# Test cache
+.pytest_cache/

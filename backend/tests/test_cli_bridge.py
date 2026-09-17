@@ -1,7 +1,8 @@
 """
 Test suite per cli_bridge.py
 
-Esegui con: pytest backend/tests/test_cli_bridge.py -v
+Esegui con: pytest backend/tests/test_cli_bridge.py -v  (solo test offline)
+Test con CLI reali: pytest backend/tests -m integration
 O per test singoli: pytest backend/tests/test_cli_bridge.py::test_query_gemini_basic -v
 """
 
@@ -19,9 +20,6 @@ from backend.cli_bridge import (
     build_prompt_from_messages,
     determine_cli,
     clean_cli_output,
-    build_gemini_command,
-    build_codex_command,
-    build_claude_command,
 )
 
 
@@ -83,22 +81,6 @@ class TestDetermineCli:
         assert determine_cli("custom-model") == "custom-model"
 
 
-class TestBuildCommands:
-    """Test per build_*_command functions"""
-
-    def test_gemini_command(self):
-        cmd = build_gemini_command("test prompt")
-        assert cmd == ["gemini", "test prompt"]
-
-    def test_codex_command(self):
-        cmd = build_codex_command("test prompt")
-        assert cmd == ["codex", "exec", "test prompt"]
-
-    def test_claude_command(self):
-        cmd = build_claude_command("test prompt")
-        assert cmd == ["claude", "-p", "--dangerously-skip-permissions", "test prompt"]
-
-
 class TestCleanCliOutput:
     """Test per clean_cli_output"""
 
@@ -137,6 +119,7 @@ tokens used
 # Integration Tests - Chiamate CLI reali
 # ============================================================================
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_gemini_basic():
     """Test che Gemini CLI risponde a una query semplice."""
@@ -151,6 +134,7 @@ async def test_query_gemini_basic():
     print(f"Gemini response: {response['content'][:100]}...")
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_codex_basic():
     """Test che Codex CLI risponde a una query semplice."""
@@ -165,6 +149,7 @@ async def test_query_codex_basic():
     print(f"Codex response: {response['content'][:100]}...")
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_claude_basic():
     """Test che Claude CLI risponde a una query semplice."""
@@ -179,6 +164,7 @@ async def test_query_claude_basic():
     print(f"Claude response: {response['content'][:100]}...")
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_parallel_all_three():
     """Test query parallele a tutte e 3 le CLI."""
@@ -203,6 +189,7 @@ async def test_query_parallel_all_three():
     assert successful >= 2, f"Expected at least 2 successful responses, got {successful}"
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_error_returns_none():
     """Test che errori CLI ritornano None senza crashare."""
@@ -214,6 +201,7 @@ async def test_error_returns_none():
     assert response is None
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_timeout_handling():
     """Test che timeout funziona correttamente."""
@@ -232,6 +220,7 @@ async def test_timeout_handling():
 # Test di Output Lungo
 # ============================================================================
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_long_output_handling():
     """Test che output lunghi vengono gestiti correttamente."""
@@ -272,12 +261,6 @@ if __name__ == "__main__":
         test_cli.test_codex_variants()
         test_cli.test_claude_variants()
         print("✓ determine_cli tests passed")
-
-        test_cmd = TestBuildCommands()
-        test_cmd.test_gemini_command()
-        test_cmd.test_codex_command()
-        test_cmd.test_claude_command()
-        print("✓ build_*_command tests passed")
 
         test_clean = TestCleanCliOutput()
         test_clean.test_gemini_cleanup()
