@@ -5,6 +5,9 @@ from .cli_bridge import query_models_parallel, query_model
 from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
 
 
+ALL_MODELS_FAILED_MESSAGE = "All models failed to respond. Please try again."
+
+
 async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models.
@@ -174,6 +177,17 @@ Provide a clear, well-reasoned final answer that represents the council's collec
     }
 
 
+def _unique_labels_in_order(labels: List[str]) -> List[str]:
+    """Keep only the first occurrence of each response label."""
+    seen = set()
+    unique_labels = []
+    for label in labels:
+        if label not in seen:
+            seen.add(label)
+            unique_labels.append(label)
+    return unique_labels
+
+
 def parse_ranking_from_text(ranking_text: str) -> List[str]:
     """
     Parse the FINAL RANKING section from the model's response.
@@ -197,15 +211,19 @@ def parse_ranking_from_text(ranking_text: str) -> List[str]:
             numbered_matches = re.findall(r'\d+\.\s*Response [A-Z]', ranking_section)
             if numbered_matches:
                 # Extract just the "Response X" part
-                return [re.search(r'Response [A-Z]', m).group() for m in numbered_matches]
+                labels = [
+                    re.search(r'Response [A-Z]', match).group()
+                    for match in numbered_matches
+                ]
+                return _unique_labels_in_order(labels)
 
             # Fallback: Extract all "Response X" patterns in order
             matches = re.findall(r'Response [A-Z]', ranking_section)
-            return matches
+            return _unique_labels_in_order(matches)
 
     # Fallback: try to find any "Response X" patterns in order
     matches = re.findall(r'Response [A-Z]', ranking_text)
-    return matches
+    return _unique_labels_in_order(matches)
 
 
 def calculate_aggregate_rankings(
@@ -310,7 +328,7 @@ async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
     if not stage1_results:
         return [], [], {
             "model": "error",
-            "response": "All models failed to respond. Please try again."
+            "response": ALL_MODELS_FAILED_MESSAGE
         }, {}
 
     # Stage 2: Collect rankings

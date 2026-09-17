@@ -1,27 +1,28 @@
 """
 Test suite per cli_bridge.py
 
-Esegui con: pytest backend/tests/test_cli_bridge.py -v
+Esegui con: pytest backend/tests/test_cli_bridge.py -v  (solo test offline)
+Test con CLI reali: pytest backend/tests -m integration
 O per test singoli: pytest backend/tests/test_cli_bridge.py::test_query_gemini_basic -v
 """
 
 import pytest
 import asyncio
+import subprocess
 import sys
 import os
+from unittest.mock import Mock
 
 # Aggiungi il path del backend
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+import backend.cli_bridge as cli_bridge
 from backend.cli_bridge import (
     query_model,
     query_models_parallel,
     build_prompt_from_messages,
     determine_cli,
     clean_cli_output,
-    build_gemini_command,
-    build_codex_command,
-    build_claude_command,
 )
 
 
@@ -83,22 +84,6 @@ class TestDetermineCli:
         assert determine_cli("custom-model") == "custom-model"
 
 
-class TestBuildCommands:
-    """Test per build_*_command functions"""
-
-    def test_gemini_command(self):
-        cmd = build_gemini_command("test prompt")
-        assert cmd == ["gemini", "test prompt"]
-
-    def test_codex_command(self):
-        cmd = build_codex_command("test prompt")
-        assert cmd == ["codex", "exec", "test prompt"]
-
-    def test_claude_command(self):
-        cmd = build_claude_command("test prompt")
-        assert cmd == ["claude", "-p", "--dangerously-skip-permissions", "test prompt"]
-
-
 class TestCleanCliOutput:
     """Test per clean_cli_output"""
 
@@ -134,9 +119,72 @@ tokens used
 
 
 # ============================================================================
+# Offline subprocess security tests
+# ============================================================================
+
+@pytest.mark.parametrize(
+    ("cli_type", "resolved_path", "expected_args"),
+    [
+        ("gemini", "/tools/gemini", []),
+        ("codex", "/tools/codex", ["exec", "-"]),
+        ("claude", "/tools/claude", ["-p", "--dangerously-skip-permissions"]),
+    ],
+)
+def test_prompt_is_passed_unchanged_only_via_stdin(
+    monkeypatch, cli_type, resolved_path, expected_args
+):
+    prompt = ('user says " & | > % ^ and keeps going: ' + "x" * 2500)
+    find_cli = Mock(return_value=resolved_path)
+    run = Mock(
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="model response", stderr=""
+        )
+    )
+    monkeypatch.setattr(cli_bridge, "_find_cli_path", find_cli)
+    monkeypatch.setattr(cli_bridge.subprocess, "run", run)
+
+    assert cli_bridge._run_cli_sync(cli_type, prompt) == "model response"
+
+    find_cli.assert_called_once_with(cli_type)
+    command = run.call_args.args[0]
+    kwargs = run.call_args.kwargs
+    assert command == [resolved_path, *expected_args]
+    assert all(prompt not in argument for argument in command)
+    assert kwargs["input"] == prompt
+    assert kwargs["shell"] is False
+
+
+def test_find_cli_path_checks_cmd_on_windows(monkeypatch):
+    which = Mock(side_effect=[None, r"C:\tools\gemini.cmd"])
+    monkeypatch.setattr(cli_bridge.os, "name", "nt")
+    monkeypatch.setattr(cli_bridge.shutil, "which", which)
+
+    assert cli_bridge._find_cli_path("gemini") == r"C:\tools\gemini.cmd"
+    assert which.call_args_list[0].args == ("gemini",)
+    assert which.call_args_list[1].args == ("gemini.cmd",)
+
+
+@pytest.mark.asyncio
+async def test_query_model_returns_none_when_cli_is_not_found(monkeypatch):
+    which = Mock(return_value=None)
+    run = Mock()
+    monkeypatch.setattr(cli_bridge.shutil, "which", which)
+    monkeypatch.setattr(cli_bridge.subprocess, "run", run)
+
+    response = await query_model(
+        "gemini", [{"role": "user", "content": "offline prompt"}]
+    )
+
+    assert response is None
+    assert which.call_args_list[0].args == ("gemini",)
+    run.assert_not_called()
+
+
+# ============================================================================
 # Integration Tests - Chiamate CLI reali
 # ============================================================================
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_gemini_basic():
     """Test che Gemini CLI risponde a una query semplice."""
@@ -151,6 +199,7 @@ async def test_query_gemini_basic():
     print(f"Gemini response: {response['content'][:100]}...")
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_codex_basic():
     """Test che Codex CLI risponde a una query semplice."""
@@ -165,6 +214,7 @@ async def test_query_codex_basic():
     print(f"Codex response: {response['content'][:100]}...")
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_claude_basic():
     """Test che Claude CLI risponde a una query semplice."""
@@ -179,6 +229,7 @@ async def test_query_claude_basic():
     print(f"Claude response: {response['content'][:100]}...")
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_parallel_all_three():
     """Test query parallele a tutte e 3 le CLI."""
@@ -203,6 +254,7 @@ async def test_query_parallel_all_three():
     assert successful >= 2, f"Expected at least 2 successful responses, got {successful}"
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_error_returns_none():
     """Test che errori CLI ritornano None senza crashare."""
@@ -214,6 +266,7 @@ async def test_error_returns_none():
     assert response is None
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_timeout_handling():
     """Test che timeout funziona correttamente."""
@@ -232,6 +285,7 @@ async def test_timeout_handling():
 # Test di Output Lungo
 # ============================================================================
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_long_output_handling():
     """Test che output lunghi vengono gestiti correttamente."""
@@ -272,12 +326,6 @@ if __name__ == "__main__":
         test_cli.test_codex_variants()
         test_cli.test_claude_variants()
         print("✓ determine_cli tests passed")
-
-        test_cmd = TestBuildCommands()
-        test_cmd.test_gemini_command()
-        test_cmd.test_codex_command()
-        test_cmd.test_claude_command()
-        print("✓ build_*_command tests passed")
 
         test_clean = TestCleanCliOutput()
         test_clean.test_gemini_cleanup()

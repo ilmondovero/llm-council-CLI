@@ -12,10 +12,9 @@ OODA Loop Implementation:
 """
 
 import asyncio
-import subprocess
 import os
-import tempfile
 import shutil
+import subprocess
 from typing import List, Dict, Any, Optional
 
 
@@ -69,10 +68,7 @@ async def query_model(
 
 
 async def run_cli_with_prompt(cli_type: str, prompt: str) -> str:
-    """
-    Esegue una CLI con il prompt dato.
-    Usa file temporanei per passare prompt lunghi in modo sicuro.
-    """
+    """Esegue una CLI passando il prompt completo e non interpretato via stdin."""
     return await asyncio.to_thread(_run_cli_sync, cli_type, prompt)
 
 
@@ -93,12 +89,7 @@ def _find_cli_path(cli_name: str) -> Optional[str]:
 
 
 def _run_cli_sync(cli_type: str, prompt: str) -> str:
-    """
-    Esecuzione sincrona della CLI.
-
-    Per prompt lunghi, usa file temporanei per evitare problemi con escape
-    di caratteri speciali su Windows.
-    """
+    """Esecuzione sincrona della CLI senza interpolare il prompt nel comando."""
     try:
         cwd = os.getcwd()
 
@@ -119,175 +110,63 @@ def _run_cli_sync(cli_type: str, prompt: str) -> str:
         return f"Error: {str(e)}"
 
 
+def _run_cli_process(
+    cli_name: str,
+    arguments: List[str],
+    prompt: str,
+    cwd: str,
+) -> subprocess.CompletedProcess:
+    """Run a resolved CLI directly, passing untrusted prompt text only via stdin."""
+    cli_path = _find_cli_path(cli_name)
+    if cli_path is None:
+        raise FileNotFoundError(f"{cli_name} CLI was not found in PATH")
+
+    return subprocess.run(
+        [cli_path, *arguments],
+        input=prompt,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=cwd,
+        shell=False,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def _process_cli_result(
+    result: subprocess.CompletedProcess,
+    cli_type: str,
+    display_name: str,
+) -> str:
+    """Normalize successful output and consistently report CLI failures."""
+    output = result.stdout or ""
+    if result.returncode != 0 and not output.strip():
+        stderr = result.stderr or ""
+        if stderr.strip():
+            return f"Error: {stderr.strip()}"
+        return f"Error: {display_name} returned code {result.returncode}"
+    return clean_cli_output(output, cli_type)
+
+
 def _run_gemini(prompt: str, cwd: str) -> str:
-    """Esegue Gemini CLI."""
-    # Salva il prompt in un file temporaneo per evitare problemi di escape
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
-        f.write(prompt)
-        prompt_file = f.name
-
-    try:
-        # Usa shell=True su Windows per trovare il comando
-        if os.name == 'nt':
-            # Legge dal file e passa a gemini via pipe
-            cmd = f'type "{prompt_file}" | gemini'
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                cwd=cwd,
-                shell=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-        else:
-            # Su Unix, usa cat | gemini
-            cmd = f'cat "{prompt_file}" | gemini'
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                cwd=cwd,
-                shell=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-
-        output = result.stdout or ""
-
-        if result.returncode != 0 and not output.strip():
-            stderr = result.stderr or ""
-            if stderr.strip():
-                return f"Error: {stderr.strip()}"
-            return f"Error: Gemini returned code {result.returncode}"
-
-        return clean_cli_output(output, "gemini")
-
-    finally:
-        if os.path.exists(prompt_file):
-            os.unlink(prompt_file)
+    """Esegue Gemini CLI con il prompt su stdin."""
+    result = _run_cli_process("gemini", [], prompt, cwd)
+    return _process_cli_result(result, "gemini", "Gemini")
 
 
 def _run_codex(prompt: str, cwd: str) -> str:
-    """Esegue Codex CLI."""
-    # Salva il prompt in un file temporaneo
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
-        f.write(prompt)
-        prompt_file = f.name
-
-    try:
-        # Codex exec legge il prompt come argomento, ma per prompt lunghi
-        # dobbiamo usare un approccio diverso
-        # Proviamo con stdin via pipe
-
-        if os.name == 'nt':
-            # Su Windows, usa type per passare il contenuto
-            cmd = f'type "{prompt_file}" | codex exec -'
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                cwd=cwd,
-                shell=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-
-            # Se fallisce, prova direttamente con il prompt (troncato se necessario)
-            if result.returncode != 0 or not result.stdout.strip():
-                # Tronca il prompt se troppo lungo per la command line
-                short_prompt = prompt[:2000] if len(prompt) > 2000 else prompt
-                # Escape virgolette
-                short_prompt = short_prompt.replace('"', '\\"')
-                cmd = f'codex exec "{short_prompt}"'
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                    cwd=cwd,
-                    shell=True,
-                    encoding='utf-8',
-                    errors='replace'
-                )
-        else:
-            cmd = f'cat "{prompt_file}" | codex exec -'
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                cwd=cwd,
-                shell=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-
-        output = result.stdout or ""
-
-        if result.returncode != 0 and not output.strip():
-            stderr = result.stderr or ""
-            if stderr.strip():
-                return f"Error: {stderr.strip()}"
-            return f"Error: Codex returned code {result.returncode}"
-
-        return clean_cli_output(output, "codex")
-
-    finally:
-        if os.path.exists(prompt_file):
-            os.unlink(prompt_file)
+    """Esegue Codex CLI con il prompt completo su stdin."""
+    result = _run_cli_process("codex", ["exec", "-"], prompt, cwd)
+    return _process_cli_result(result, "codex", "Codex")
 
 
 def _run_claude(prompt: str, cwd: str) -> str:
-    """Esegue Claude CLI."""
-    # Salva il prompt in un file temporaneo
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
-        f.write(prompt)
-        prompt_file = f.name
-
-    try:
-        if os.name == 'nt':
-            # Su Windows, usa type per passare il contenuto via pipe
-            cmd = f'type "{prompt_file}" | claude -p --dangerously-skip-permissions'
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                cwd=cwd,
-                shell=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-        else:
-            cmd = f'cat "{prompt_file}" | claude -p --dangerously-skip-permissions'
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                cwd=cwd,
-                shell=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-
-        output = result.stdout or ""
-
-        if result.returncode != 0 and not output.strip():
-            stderr = result.stderr or ""
-            if stderr.strip():
-                return f"Error: {stderr.strip()}"
-            return f"Error: Claude returned code {result.returncode}"
-
-        return clean_cli_output(output, "claude")
-
-    finally:
-        if os.path.exists(prompt_file):
-            os.unlink(prompt_file)
+    """Esegue Claude CLI con il prompt su stdin."""
+    result = _run_cli_process(
+        "claude", ["-p", "--dangerously-skip-permissions"], prompt, cwd
+    )
+    return _process_cli_result(result, "claude", "Claude")
 
 
 def build_prompt_from_messages(messages: List[Dict[str, str]]) -> str:
